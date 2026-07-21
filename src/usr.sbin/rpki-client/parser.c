@@ -1072,6 +1072,12 @@ parse_worker(void *arg)
 				errx(1, "pthread_cond_wait: %s",
 				    strerror(error));
 		}
+		if (quit) {
+			if ((error = pthread_mutex_unlock(&globalq_mtx)) != 0)
+				errx(1, "pthread_mutex_unlock: %s",
+				    strerror(error));
+			break;
+		}
 		n = 0;
 		while ((entp = TAILQ_FIRST(&globalq)) != NULL) {
 			TAILQ_REMOVE(&globalq, entp, entries);
@@ -1141,6 +1147,8 @@ parse_writer(void *arg)
 			if (error != 0)
 				errx(1, "pthread_mutex_lock: %s",
 				    strerror(error));
+			if (quit)
+				break;
 		}
 
 		if (msgbuf_queuelen(myq) > 0) {
@@ -1279,13 +1287,19 @@ proc_parser(int fd, int nthreads)
 	}
 
 	/* signal all threads */
+	if ((error = pthread_mutex_lock(&globalq_mtx)) != 0)
+		errx(1, "pthread_mutex_lock: %s", strerror(error));
+	if ((error = pthread_mutex_lock(&globalmsgq_mtx)) != 0)
+		errx(1, "pthread_mutex_lock: %s", strerror(error));
+
 	if ((error = pthread_cond_broadcast(&globalq_cond)) != 0)
 		errx(1, "pthread_cond_broadcast: %s", strerror(error));
 	if ((error = pthread_cond_broadcast(&globalmsgq_cond)) != 0)
 		errx(1, "pthread_cond_broadcast: %s", strerror(error));
 
-	if ((error = pthread_mutex_lock(&globalq_mtx)) != 0)
-		errx(1, "pthread_mutex_lock: %s", strerror(error));
+	if ((error = pthread_mutex_unlock(&globalmsgq_mtx)) != 0)
+		errx(1, "pthread_mutex_unlock: %s", strerror(error));
+
 	while ((entp = TAILQ_FIRST(&globalq)) != NULL) {
 		TAILQ_REMOVE(&globalq, entp, entries);
 		entity_free(entp);
